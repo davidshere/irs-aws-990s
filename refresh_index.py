@@ -13,7 +13,7 @@ AWS_RESPONSE_JSON_FIELDS = ['DLN', 'OrganizationName', 'EIN', 'FormType', 'TaxPe
 SQLITE_DB = 'index.db'
 
 CREATE_TABLE_QUERY = '''
-	create table return_index (
+	create table return_indices (
 		dln text,
 		org_name text,
 		ein text,
@@ -26,12 +26,12 @@ CREATE_TABLE_QUERY = '''
 	);
 '''
 
-INSERT_QUERY = "insert into return_index (dln, org_name, ein, form_type, tax_period, sub_date, last_updated, object_id, url) values (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+INSERT_QUERY = "insert into return_indices (dln, org_name, ein, form_type, tax_period, sub_date, last_updated, object_id, url) values (?, ?, ?, ?, ?, ?, ?, ?, ?)"
 
 def create_return_index_table(conn):
-	""" Check for the existence of the return_index table in a SQLite3 DB """
+	""" Drop and create the return index """
 	cur = conn.cursor()
-	cur.execute('drop table if exists return_index')
+	cur.execute('drop table if exists return_indices')
 	cur.execute(CREATE_TABLE_QUERY)
 
 def get_keys():
