@@ -1,10 +1,10 @@
 from collections import defaultdict
 from lxml import etree
 
-SCHEMA_FILENAME = "efile990x_2015v2.1/2015v2.1/TEGE/TEGE990EZ/IRS990EZ/IRS990EZ.xsd"
-
+SCHEMA_FILENAME = "efile990x_2015v2.1/2015v2.1/TEGE/Common/IRS990ScheduleB/IRS990ScheduleB.xsd"
 
 XML_ELEMENT_TAG = '{http://www.w3.org/2001/XMLSchema}element'
+
 XML_TAGS = {
 	'{http://www.w3.org/2001/XMLSchema}schema': 'schema',
 	'{http://www.w3.org/2001/XMLSchema}annotation': 'annotation',
@@ -26,7 +26,8 @@ XML_TAGS = {
 	'{http://www.w3.org/2001/XMLSchema}include': 'include',
 	'{http://www.w3.org/2001/XMLSchema}fractionDigits': 'fraction_digits',
 	'{http://www.w3.org/2001/XMLSchema}minInclusive': 'min_inclusive',
-	'{http://www.w3.org/2001/XMLSchema}maxInclusive': 'max_inclusive'
+	'{http://www.w3.org/2001/XMLSchema}maxInclusive': 'max_inclusive',
+	'{http://www.w3.org/2001/XMLSchema}enumeration': 'enumeration'
 }
 
 IRS_TAGS = {
@@ -120,14 +121,13 @@ class Schema990:
 			return None
 
 	def __str__(self):
-		return "<IRS Schema Version: %s>" % self.version
+		return "<IRS Schema Form: %s Version: %s>" % (self.form_type, self.version)
 
 	def __repr__(self):
-		return "<IRS Schema Version: %s>" % self.version
+		return "<IRS Schema Form: %s Version: %s>" % (self.form_type, self.version)
 
 
 if __name__ == "__main__":
 	schema = Schema990(SCHEMA_FILENAME, '2015v2.1')
-	schema.get_form_type()
 
 
