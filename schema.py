@@ -1,20 +1,15 @@
-""" Practice parsing XML. 
-
-	Goal is to make a simple utility to look up the meaning of elements and items in 
-	the publicly available 990s
-"""
 from collections import defaultdict
-
 from lxml import etree
 
 SCHEMA_FILENAME = "efile990x_2015v2.1/2015v2.1/TEGE/TEGE990EZ/IRS990EZ/IRS990EZ.xsd"
 
 
+XML_ELEMENT_TAG = '{http://www.w3.org/2001/XMLSchema}element'
 XML_TAGS = {
 	'{http://www.w3.org/2001/XMLSchema}schema': 'schema',
 	'{http://www.w3.org/2001/XMLSchema}annotation': 'annotation',
 	'{http://www.w3.org/2001/XMLSchema}documentation': 'documentation',
-	'{http://www.w3.org/2001/XMLSchema}element': 'element',
+	XML_ELEMENT_TAG: 'element',
 	'{http://www.w3.org/2001/XMLSchema}complexType': 'complex_type',
 	'{http://www.w3.org/2001/XMLSchema}complexContent': 'complex_content',
 	'{http://www.w3.org/2001/XMLSchema}extension': 'extension',
@@ -48,13 +43,16 @@ class Schema990:
 		Takes a filename as input and parses the tree on instantiation.
 	"""
 	def __init__(self, filename, version):
+		# create the basic tree objects
 		self.tree = etree.parse(filename)
-		self.root = tree.getroot()
+		self.root = self.tree.getroot()
+
+		# parse the tree
 		self.elements = defaultdict(dict)
 		self.parse(self.root)
+		
+		self.form_type = self.get_form_type()
 		self.version = version
-		for element in self.elements:
-			self.elements[element]['version'] = version
 
 	def parse(self, elem, element_type=None, verbose=False):
 		""" We need to recursively parse an XML schema tree with two different namespaces.
@@ -75,16 +73,18 @@ class Schema990:
 			# is it an XML tag?
 			if child.tag in XML_TAGS.keys():
 				current_element = None
-				#print("going deeper!", child.tag)
 				tag_type = XML_TAGS.get(child.tag)
 
-				# is it an element? if so, it'll have a name that we want to keep track of as we're moving recursively down the tree
+				# is it an element? if so, it'll have a name that we want to 
+				# keep track of as we're moving recursively down the tree
 				if tag_type == 'element' and child.get('name'):
 					current_element = child.get('name')
 					if verbose:
 						print("Element type:", current_element)
 
-				# if we have a passed element name or we got an element name, we want to call the parser with that element name. Otherwise we call it without out.
+				# if we have a passed element name or we got an element name, we
+				# want to call the parser with that element name. Otherwise we 
+				# call it without out.
 				if current_element:
 					self.parse(child, element_type=current_element)
 				elif element_type:
@@ -94,11 +94,15 @@ class Schema990:
 			
 			# or is it an IRS tag?
 			elif child.tag in IRS_TAGS.keys():
-				#print(element_type, child.tag, child.text)
 				self.elements[element_type][self._get_element_tag_without_namespace(child)] = child.text
+
+			# otherwise notify the user that something is going on
 			else:
-				if verbose:
-					print(child.tag)
+				print('Unidentified tag:', child.tag)
+
+	def get_form_type(self):
+		top_level_element_tag = [elem for elem in self.root if elem.tag == XML_ELEMENT_TAG][0]
+		return top_level_element_tag.get('name')
 
 	def _get_element_tag_without_namespace(self, elem):
 		""" Returns the element tag without the corresponding namespace 
@@ -109,6 +113,21 @@ class Schema990:
 		"""
 		return elem.tag.split('}')[1].lower()
 
-schema = Schema990(SCHEMA_FILENAME, '2015v2.1')
+	def get(self, element_name):
+		if element_name in self.elements.keys():
+			return self.elements[element_name]
+		else:
+			return None
+
+	def __str__(self):
+		return "<IRS Schema Version: %s>" % self.version
+
+	def __repr__(self):
+		return "<IRS Schema Version: %s>" % self.version
+
+
+if __name__ == "__main__":
+	schema = Schema990(SCHEMA_FILENAME, '2015v2.1')
+	schema.get_form_type()
 
 
