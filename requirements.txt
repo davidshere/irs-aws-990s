@@ -1,0 +1,10 @@
+beautifulsoup4==4.5.1
+boto==2.44.0
+botocore==1.4.85
+docutils==0.13.1
+jmespath==0.9.0
+lxml==3.7.0
+python-dateutil==2.6.0
+requests==2.12.4
+s3transfer==0.1.9
+six==1.10.0
