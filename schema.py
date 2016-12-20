@@ -52,6 +52,8 @@ class Schema990:
 		# parse the tree
 		self.elements = defaultdict(dict)
 		self.parse(self.root)
+		# this shouldn't still be a defaultdict
+		self.elements = dict(self.elements)
 		
 		self.form_type = self.get_form_type()
 		self.version = version
@@ -100,6 +102,8 @@ class Schema990:
 			# otherwise notify the user that something is going on
 			else:
 				print('Unidentified tag:', child.tag)
+
+
 
 	def get_form_type(self):
 		top_level_element_tag = [elem for elem in self.root if elem.tag == XML_ELEMENT_TAG][0]
