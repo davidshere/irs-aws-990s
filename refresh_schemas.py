@@ -29,7 +29,9 @@ def get_tax_year_pages():
 	# We also want to skip the first element of rows which has no <td> elements 
 	# and the last which is empty. 
 	# for the remaining elements, we want to grab the first td element
-	relevant_td_elements = [row.find_all('td')[0] for row in rows if row.find('td')][:-1]
+	td_elements = [row.find_all('td')[0] for row in rows if row.find('td')]
+	relevant_td_elements = td_elements[:-1]
+
 	relevent_a_elements = [td.find('a') for td in relevant_td_elements]
 	links = {a.text: a['href'] for a in relevent_a_elements}
 	return links
@@ -57,7 +59,20 @@ def get_schema_zip(url):
 	buff = BytesIO(r.content)
 	return zipfile.ZipFile(buff)
 
+def construct_row(schema_obj, key):
+	""" Construct a row with a schema object and a string key, 
+		representing an element in the tax return. The elements,
+		in order, are:
 
+			0: Schema version
+			1: Form type (i.e. 990EZ, 990PF, etc.)
+			2: Description
+			3: Line number in the actual tax form
+	"""
+	return [schema_obj.version, 
+			schema_obj.form_type, 
+			schema_obj.elements[key].get('description'),
+			schema_obj.elements[key].get('linenumber')]
 if __name__ == "__main__":
 
 	tax_year_pages = get_tax_year_pages()
@@ -74,7 +89,28 @@ if __name__ == "__main__":
 	
 	with compressed_schema.open(test_filename) as f:
 		s = schema.Schema990(f, version)
-		print(s)
+	
+	rows = [construct_row(s, key) for key in s.elements.keys()]
+
+	conn = sqlite3.connect('index.db')
+	cur = conn.cursor()
+
+	CREATE_TABLE_STATEMENT = '''
+	drop table if exists return_element_map;
+	create table return_element_map (
+		version text,
+		form_type text,
+		description text,
+		line_number text
+	);
+	'''
+	cur.execute(CREATE_TABLE_STATEMENT)
+
+	INSERT_QUERY = "insert into return_element_map (version, form_type, description, line_number) values (?, ?, ?, ?)"
+	cur.executemany(INSERT_QUERY, rows)
+
+	conn.commit()
+
 
 
 
