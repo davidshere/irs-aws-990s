@@ -16,6 +16,7 @@ XML_TAGS = {
 	'{http://www.w3.org/2001/XMLSchema}attributeGroup': 'attribute_group',
 	'{http://www.w3.org/2001/XMLSchema}attribute': 'attribute',
 	'{http://www.w3.org/2001/XMLSchema}sequence': 'sequence',
+	'{http://www.w3.org/2001/XMLSchema}group': 'group',
 	'{http://www.w3.org/2001/XMLSchema}choice': 'choice',
 	'{http://www.w3.org/2001/XMLSchema}simpleContent': 'simple_content',
 	'{http://www.w3.org/2001/XMLSchema}simpleType': 'simple_type',
@@ -62,7 +63,6 @@ class Schema990:
 			element_type is used to keep track of the name of the element as we move down the tree to the actual content
 			verbose tells the function whether or not to print information to the screen as it progresses
 		"""
-		#print('call', element_type)
 		# get the elements children, and remove comments
 		children = elem.getchildren()
 		children_without_comments = [child for child in children if not isinstance(child, etree._Comment)]
