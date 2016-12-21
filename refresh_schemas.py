@@ -10,7 +10,6 @@ import schema
 
 BASE_URL = 'https://www.irs.gov'
 URL_WITH_LINKS_TO_YEAR_PAGES = '/charities-non-profits/current-valid-xml-schemas-and-business-rules-for-exempt-organizations-modernized-e-file'
-YR_TBL_TAG_SUMMARY_REGEX = r'Links to Form 990 TY20[0-2][0-9] Schemas, Business Rules, Release Memos'
 
 YEAR_PAGE_TABLE_NUMBER = 1
 SCHEMA_TABLE_NUMBER = 1
@@ -52,7 +51,11 @@ def get_link_to_schema_zip(url):
 	soup = get_soup(url)
 	table = soup.find_all('table')[SCHEMA_TABLE_NUMBER]
 	td = table.find_all('td')[SCHEMA_ROW_NUMBER]
-	return BASE_URL + td.find('a')['href']
+	link = td.find('a')
+	if link:
+		return BASE_URL + link['href']
+	else:
+		return None
 
 def get_schema_zip(url):
 	r = requests.get(url)
@@ -73,30 +76,13 @@ def construct_row(schema_obj, key):
 			schema_obj.form_type, 
 			schema_obj.elements[key].get('description'),
 			schema_obj.elements[key].get('linenumber')]
+
 if __name__ == "__main__":
-
-	tax_year_pages = get_tax_year_pages()
-	url = tax_year_pages['2014']
-
-	schema_pages = get_links_to_schema_pages(url)
-	version = '2014v1.0'
-	url = schema_pages[version]
-
-	link_to_schema = get_link_to_schema_zip(url)
-	compressed_schema = get_schema_zip(link_to_schema)
-
-	test_filename = '2014v1.0/TEGE/TEGE990/IRS990/IRS990.xsd'
-	
-	with compressed_schema.open(test_filename) as f:
-		s = schema.Schema990(f, version)
-	
-	rows = [construct_row(s, key) for key in s.elements.keys()]
 
 	conn = sqlite3.connect('index.db')
 	cur = conn.cursor()
 
-	CREATE_TABLE_STATEMENT = '''
-	drop table if exists return_element_map;
+	CREATE_TABLE_QUERY = '''
 	create table return_element_map (
 		version text,
 		form_type text,
@@ -104,12 +90,46 @@ if __name__ == "__main__":
 		line_number text
 	);
 	'''
-	cur.execute(CREATE_TABLE_STATEMENT)
+	cur.execute('drop table if exists return_element_map;')
+	cur.execute(CREATE_TABLE_QUERY)
 
-	INSERT_QUERY = "insert into return_element_map (version, form_type, description, line_number) values (?, ?, ?, ?)"
-	cur.executemany(INSERT_QUERY, rows)
+	tax_year_pages = get_tax_year_pages()
+
+	for year in tax_year_pages:
+		print(year)
+		url = tax_year_pages[year]
+		schema_pages = get_links_to_schema_pages(url)
+		for version in schema_pages.keys():
+			print(version)
+			url = schema_pages[version]
+			try:
+				link_to_schema = get_link_to_schema_zip(url)
+				if link_to_schema:
+					compressed_schema = get_schema_zip(link_to_schema)
+					# still need to find how to get the files I want
+					fileinfo = [info for info in compressed_schema.infolist()]
+					tege_files = [info.filename for info in fileinfo if 'TEGE' in info.filename]
+					
+					return_schema_filenames = [filename for filename in tege_files if re.match('.*IRS990.{0,2}.xsd', filename)]
+					schedule_schema_filenames = [filename for filename in tege_files if re.match('.*IRS990Schedule[A-Z].xsd', filename)]
+					return_schema_filenames.extend(schedule_schema_filenames)
+
+					for schema_doc in return_schema_filenames:
+						with compressed_schema.open(schema_doc) as f:
+							s = schema.Schema990(f, version)
+
+						rows = [construct_row(s, key) for key in s.elements.keys()]
+
+						INSERT_QUERY = "insert into return_element_map (version, form_type, description, line_number) values (?, ?, ?, ?)"
+						cur.executemany(INSERT_QUERY, rows)
+			except IndexError as e:
+				print(e)
 
 	conn.commit()
+
+
+
+
 
 
 

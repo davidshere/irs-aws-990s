@@ -103,8 +103,6 @@ class Schema990:
 			else:
 				print('Unidentified tag:', child.tag)
 
-
-
 	def get_form_type(self):
 		top_level_element_tag = [elem for elem in self.root if elem.tag == XML_ELEMENT_TAG][0]
 		return top_level_element_tag.get('name')
