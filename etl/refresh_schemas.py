@@ -62,6 +62,50 @@ def get_schema_zip(url):
 	buff = BytesIO(r.content)
 	return zipfile.ZipFile(buff)
 
+def get_schema_filenames_from_zip(zf):
+	fileinfo = [info for info in zf.infolist()]
+	tege_files = [info.filename for info in fileinfo if 'TEGE' in info.filename]
+	return_schema_filenames = [filename for filename in tege_files if re.match('.*IRS990.{0,2}.xsd', filename)]
+	schedule_schema_filenames = [filename for filename in tege_files if re.match('.*IRS990Schedule[A-Z].xsd', filename)]
+	return_schema_filenames.extend(schedule_schema_filenames)
+	return return_schema_filenames
+
+def parse_xml_schema(schema_doc):
+	with compressed_schema.open(schema_doc) as f:
+		s = schema.Schema990(f, version)
+
+	return [construct_row(s, key) for key in s.elements.keys()]
+
+def write_schema_elements_to_db(cursor, rows):
+	INSERT_QUERY = "insert into return_element_map (version, form_type, description, line_number) values (?, ?, ?, ?)"
+	cursor.executemany(INSERT_QUERY, rows)
+
+def process_schema_version(url):
+	try:
+		link_to_schema = get_link_to_schema_zip(url)
+		if link_to_schema:
+			compressed_schema = get_schema_zip(link_to_schema)
+
+			filenames = get_schema_filenames_from_zip(compressed_schema)
+
+			for schema_doc in filenames:
+				schema_elements = parse_xml_schema(schema_doc)
+				write_schema_elements_to_db(cur, schema_elements):
+	except IndexError as e:
+		print(e)
+
+def prepare_table(cursor):
+	CREATE_TABLE_QUERY = '''
+	create table return_element_map (
+		version text,
+		form_type text,
+		description text,
+		line_number text
+	);
+	'''
+	cursor.execute('drop table if exists return_element_map;')
+	cursor.execute(CREATE_TABLE_QUERY)
+
 def construct_row(schema_obj, key):
 	""" Construct a row with a schema object and a string key, 
 		representing an element in the tax return. The elements,
@@ -81,49 +125,15 @@ if __name__ == "__main__":
 
 	conn = sqlite3.connect('index.db')
 	cur = conn.cursor()
-
-	CREATE_TABLE_QUERY = '''
-	create table return_element_map (
-		version text,
-		form_type text,
-		description text,
-		line_number text
-	);
-	'''
-	cur.execute('drop table if exists return_element_map;')
-	cur.execute(CREATE_TABLE_QUERY)
-
+	prepare_table(cur)
 	tax_year_pages = get_tax_year_pages()
 
 	for year in tax_year_pages:
-		print(year)
 		url = tax_year_pages[year]
 		schema_pages = get_links_to_schema_pages(url)
 		for version in schema_pages.keys():
-			print(version)
 			url = schema_pages[version]
-			try:
-				link_to_schema = get_link_to_schema_zip(url)
-				if link_to_schema:
-					compressed_schema = get_schema_zip(link_to_schema)
-					# still need to find how to get the files I want
-					fileinfo = [info for info in compressed_schema.infolist()]
-					tege_files = [info.filename for info in fileinfo if 'TEGE' in info.filename]
-					
-					return_schema_filenames = [filename for filename in tege_files if re.match('.*IRS990.{0,2}.xsd', filename)]
-					schedule_schema_filenames = [filename for filename in tege_files if re.match('.*IRS990Schedule[A-Z].xsd', filename)]
-					return_schema_filenames.extend(schedule_schema_filenames)
-
-					for schema_doc in return_schema_filenames:
-						with compressed_schema.open(schema_doc) as f:
-							s = schema.Schema990(f, version)
-
-						rows = [construct_row(s, key) for key in s.elements.keys()]
-
-						INSERT_QUERY = "insert into return_element_map (version, form_type, description, line_number) values (?, ?, ?, ?)"
-						cur.executemany(INSERT_QUERY, rows)
-			except IndexError as e:
-				print(e)
+			process_schema_version(verseion)
 
 	conn.commit()
 

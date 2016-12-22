@@ -12,7 +12,7 @@ INDEX_FILE_EXTENSION = '.json'
 AWS_RESPONSE_JSON_FIELDS = ['DLN', 'OrganizationName', 'EIN', 'FormType', 'TaxPeriod', 'SubmittedOn', 'LastUpdated', 'ObjectId', 'URL']
 SQLITE_DB = 'index.db'
 
-CREATE_TABLE_QUERY = '''
+SQLITE_CREATE_TABLE_QUERY = '''
 	create table return_indices (
 		dln text,
 		org_name text,
