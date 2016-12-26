@@ -1,7 +1,7 @@
 from collections import defaultdict
 from lxml import etree
 
-SCHEMA_FILENAME = "efile990x_2015v2.1/2015v2.1/TEGE/Common/IRS990ScheduleB/IRS990ScheduleB.xsd"
+SCHEMA_FILENAME = "../sample_data/efile990x_2015v2.1/2015v2.1/TEGE/Common/IRS990ScheduleB/IRS990ScheduleB.xsd"
 
 XML_ELEMENT_TAG = '{http://www.w3.org/2001/XMLSchema}element'
 

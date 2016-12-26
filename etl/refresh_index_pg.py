@@ -47,10 +47,6 @@ def write_index_data_to_db(data_str, conn):
 	cur = conn.cursor()
 	cur.copy_from(data_str, 'return_indices')
 
-def update_primary_key(conn):
-	cur = conn.cursor()
-	cur.execute('update table return_indices set id=row_number() over (order by tax_period, dln);')
-
 if __name__ == "__main__":
 
 	# connect to the database
