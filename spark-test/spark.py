@@ -1,5 +1,5 @@
 from pyspark.sql import SQLContext
-from pyspark.sql.types import StructType, ArrayType
+from pyspark.sql.types import StructType
 sqlContext = SQLContext(sc)
 
 df = sqlContext.read
@@ -22,32 +22,20 @@ people = df.select('ObjectID', 'ReturnData.IRS990.Form990PartVIISectionA.NamePer
 
 
 
-def get_all_schema_types(schema, recursion_level=0):
+def map_paths(schema, recursion_level=0, parents=[]):
 	for element in schema:
 		dt = element.dataType
 		if isinstance(dt, StructType):
-			print '-', element.name, recursion_level
-			get_all_schema_types(dt, recursion_level + 1)
+			new_parent = parents + [element.name]
+			map_paths(dt, recursion_level + 1, new_parent)
 		else:
-			print '*', element.name, recursion_level
+			print element.name, '.'.join(parents + [element.name])
+
+map_paths(f.schema)
 
 f = df.select('ReturnHeader.Filer')
-get_all_schema_types(f.schema)
+f.printSchema()
 
-def get_all_schema_types(schema, parents=[], siblings=[]):
-	for element in schema:
-		dt = element.dataType
-		parents.append(element.name)
-		if isinstance(dt, StructType):
-			get_all_schema_types(dt, parents, siblings)
-		else:
-			print '*', '.'.join(parents)
-			parents.pop()
-
-get_all_schema_types(rh.schema)
-
-
-x=get_all_schema_types(schema)
 
 # EMR
 df = sqlContext.read.format('com.databricks.spark.xml').options(rowTag='Return').load('s3://irs-form-990-hadoop/xml/*')
