@@ -1,8 +1,9 @@
+import os
+
 from mrjob.job import MRJob
 from lxml import etree
 
-from query_return import TaxReturn
-
+from tax_return import TaxReturn
 
 class MRFindUniquePaths(MRJob):
 
@@ -10,10 +11,9 @@ class MRFindUniquePaths(MRJob):
         tree = etree.XML(line)
         s = TaxReturn(tree)
         version, paths = s.get_paths()
-        form_kind = s.get_form_kind()
+        form_type = s.form_type
         for path in paths:
-            yield (version, form_kind), path
-
+            yield (version, form_type), path
 
     def reducer(self, key, values):
         paths = set(values)
