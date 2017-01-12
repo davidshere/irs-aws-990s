@@ -1,15 +1,17 @@
 from collections import defaultdict
 import io
 import gzip
+import socket
 
 from boto.s3.connection import S3Connection
 from boto.s3.key import Key
 from lxml import etree
 
-from tax_return import TaxReturn
+
 
 SOURCE_BUCKET = 'irs-form-990'
 DEST_BUCKET = 'irs-form-990-hadoop'
+S3_FOLDER = 'line-delimited-xml/'
 
 conn = S3Connection()
 
@@ -32,11 +34,20 @@ def process_single_return(item):
 		removing unneccesary characters and adding information
 		about the return itself (i.e. object_id)
 	"""
-	raw_xml = item.read()
+	# recover in case of a time out
+	while True:
+		try:
+			raw_xml = item.read()
+			break
+		except socket.timeout:
+			continue
+			
 	clean_xml = clean_xml_string(raw_xml)
 	single_return = etree.XML(clean_xml)
+
 	version = single_return.get('returnVersion')
 	object_id = item.name.split('_')[0]
+	
 	single_return.append(etree.XML('<ObjectID>%s</ObjectID>' % object_id))
 	single_return = etree.tostring(single_return)
 	return single_return, version
@@ -61,7 +72,7 @@ def fetch_processed_returns(tracker=None, existing_filenames=[]):
 				print(i)
 				print([{doc_ver: len(DOCUMENTS[doc_ver])} for doc_ver in DOCUMENTS])
 
-			if len(DOCUMENTS[version]) == 25000:
+			if len(DOCUMENTS[version]) == 30000:
 
 				docs = b'\n'.join(DOCUMENTS[version])
 				compressed = gzip.compress(docs)
@@ -69,6 +80,7 @@ def fetch_processed_returns(tracker=None, existing_filenames=[]):
 				yield compressed, version
 
 def upload_files_to_s3(bucket, return_string, version, filename):
+	filename = S3_FOLDER + filename
 	key = Key(bucket=bucket, name=filename)
 	key.set_contents_from_string(return_string)
 
@@ -82,9 +94,6 @@ if __name__ == "__main__":
 		filename = 'v%s_id%d.xml.gz' % (version, id(returns))
 		print("Writing %s" % filename)
 		upload_files_to_s3(dest_bucket, returns, version, filename)
-		#write_files_to_disk(version, returns, filename)
-		if j == 2:
-			raise Exception
 
 	for version in DOCUMENTS:
 		returns = DOCUMENTS[version]
