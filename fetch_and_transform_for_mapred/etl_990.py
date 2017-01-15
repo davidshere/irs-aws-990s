@@ -82,39 +82,49 @@ class ReturnETL(object):
 		split_tags = [tag for tag in without_newlines.split(b'  ') if tag]
 		return b' '.join(split_tags)
 
-	def process_single_return(self, raw_xml):
+	def process_single_return(self, raw_xml, object_id):
 		""" Turn a single Key into an lxml._Element object,
 			removing unneccesary characters and adding information
 			about the return itself (i.e. object_id)
 		"""
-		clean_xml = _clean_xml_string(raw_xml)
+		clean_xml = self._clean_xml_string(raw_xml)
 		single_return = etree.XML(clean_xml)
 
-		object_id = item.name.split('_')[0]
 		single_return.append(etree.XML('<ObjectID>%s</ObjectID>' % object_id))
 
 		version = single_return.get('returnVersion')
 		single_return = etree.tostring(single_return)
 		return single_return, version
 
+	def get_object_id_from_url(url):
+		return url.split('/')[-1].split('_')[0]
+
+	def get_object_id_from_filename(key_name):
+		return key_name.split('_')[0]
+
 	## iterators to that return raw xml for processing
 	def sql_iterator(self):
 		conn = psycopg2.connect(os.environ['DB_URI'])
 		cur = conn.cursor()
 		cur.execute(self.query)
-		for result in cur:
+		for row in cur:
+			# row will be a 1-tuple (i.e `('https://...', )`)
+			url = row[0]
+
+			object_id = get_object_id_from_url(url)
 			r = requests.get(url)
-			yield r.content
+			yield r.content, object_id
 
 	def s3_iterator(self):
 		for key in bucket.list():
 			fname = key.name
+			object_id = get_object_id_from_filename(fname)
 			if fname.endswith('_public.xml'):	
 				# recover in case of a timeout
 				# but how the hell do you test this?
 				while True:
 					try:
-						yield key.read()
+						yield key.read(), object_id
 						break
 					except socket.timeout:
 						continue
@@ -137,8 +147,9 @@ class ReturnETL(object):
 		else:
 			iterator = self.s3_iterator()
 
-		for index, xml_string in enumerate(iterator):
-			doc, version = process_single_return(xml_string)
+		for index, (xml_string, object_id) in enumerate(iterator):
+			
+			doc, version = self.process_single_return(xml_string, object_id)
 			self.documents[version].append(doc)
 
 			if index % 100:
