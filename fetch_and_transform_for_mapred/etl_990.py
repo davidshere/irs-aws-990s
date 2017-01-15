@@ -25,12 +25,35 @@ DOCS_PER_FILE = 30000
 class ReturnETL(object):
 	""" A class to fetch raw 990s, transform them into a particular shape,
 		and write them to some output source. 
+
+		source - 'boto' if you're going to iterate through the contents
+				 of `source_bucket`, anything else if you want to get 
+				 URLs from the DB and iterate through those.
+
+		destination - 's3' if you're writing output to S3, otherwise you'll
+					  be writing to disk.
+
+		style - 'line-delimited' if you want line-delimited xml strings. That's
+				the only functionality for now. The alternative would be to write
+				files that are valid XML.
+
+		dest_path - the path, relative or absolute, that you want to write your
+					output to, regardless of whether that's s3 or disk
+
+		source_bucket - Necessary if source='boto'. This is the bucket
+						through which you'll iterate. The keys should be
+						XML files that end with '_public.xml'.
+
+		dest_bucket - Necessary if destination='s3'. 
+
+		query - Necessary if source != 'boto'. This should return a single
+				column with urls pointing to the XML files you want to pull.
 	"""
 	def __init__(self, 
 				 source='boto', 
 				 destination='s3', 
 				 style='line-delimited',
-				 dest_path = '',
+				 dest_path = '.',
 				 source_bucket=None,
 				 dest_bucket=None,
 				 query=None):
@@ -39,7 +62,7 @@ class ReturnETL(object):
 		self.source = source
 		self.destination = destination
 		self.style = style
-		self.dest_path
+		self.dest_path = dest_path
 
 		# if we're getting returns via url instead of boto, we'll need
 		# a query to run
@@ -67,10 +90,10 @@ class ReturnETL(object):
 		clean_xml = _clean_xml_string(raw_xml)
 		single_return = etree.XML(clean_xml)
 
-		version = single_return.get('returnVersion')
 		object_id = item.name.split('_')[0]
-		
 		single_return.append(etree.XML('<ObjectID>%s</ObjectID>' % object_id))
+
+		version = single_return.get('returnVersion')
 		single_return = etree.tostring(single_return)
 		return single_return, version
 
@@ -79,7 +102,7 @@ class ReturnETL(object):
 		conn = psycopg2.connect(os.environ['DB_URI'])
 		cur = conn.cursor()
 		cur.execute(self.query)
-		for result in cur.iterate():
+		for result in cur:
 			r = requests.get(url)
 			yield r.content
 
@@ -99,6 +122,9 @@ class ReturnETL(object):
 				continue
 
 	def process_documents_for_writing(self, version):
+		""" Turns a list of XML strings into a single gzipped and
+			line delimited document 
+		"""
 		if self.style=='line-delimited':
 			docs = b'\n'.join(self.documents[version])
 			compressed = gzip.compress(docs)
@@ -106,7 +132,7 @@ class ReturnETL(object):
 
 	def processed_returns(self):
 		""" An iterator that yields aggregated XML files and their version """ 
-		if source:
+		if self.source:
 			iterator = self.sql_iterator()
 		else:
 			iterator = self.s3_iterator()
@@ -115,7 +141,7 @@ class ReturnETL(object):
 			doc, version = process_single_return(xml_string)
 			self.documents[version].append(doc)
 
-			if index % 1000:
+			if index % 100:
 				print(i, [{doc_ver: len(self.documents[doc_ver])} for doc_ver in self.documents])
 
 			if len(self.documents[version]) == DOCS_PER_FILE:
@@ -125,36 +151,43 @@ class ReturnETL(object):
 
 	# methods that write XML to a particular source.
 	# each should take same methods
-	def write_s3(self, bucket, return_string, version, filename, filepath):
-		filename = filepath + filename
-		key = Key(bucket=self.bucket, name=filename)
+	def write_s3(self, return_string, filepath):
+		key = Key(bucket=self.dest_bucket, name=filepath)
 		key.set_contents_from_string(return_string)
 
-	def write_disk(self, version, return_string, filename, path):
-		with open(filename , 'wb') as f: 
+	def write_disk(self, return_string, filepath):
+		with open(filepath , 'wb') as f: 
 			f.write(return_string)
 
-	def _get_filename(version, returns):
+	def _get_filename(self, returns, version):
 		filename = 'v%s_id%d.xml.gz' % (version, id(returns))
 		return self.path + filename
 
 	def run(self):
-		for file_to_write, version in self.fetch_processed_returns():
+		for file_to_write, version in self.processed_returns():
 			filename = _get_filename(file_to_write, version)
-			if destination = 's3':
+			if destination == 's3':
 				write = write_s3
 			else:
 				write = write_disk
+			path = _get_filename(file_to_write, version)
 			write(files_to_write, filename)
 
 		# write whatever is left with less than DOCS_PER_FILE
 		for version in self.documents:
 			returns = self.documents[version]
-			filename = _get_filename(returns, version)
-			write(returns, filename)
+			path = _get_filename(returns, version)
+			write(returns, path)
 
 
 
 if __name__ == "__main__":
-	etl = ReturnETL()
+
+	urls_to_fetch_query = 'select url from return_indices where object_id not in (select object_id from found_ids);'
+
+	etl = ReturnETL(source='sql',
+					destination='s3',
+					dest_bucket=DEST_BUCKET,
+					query=urls_to_fetch_query,
+					dest_path=S3_FOLDER)
 	etl.run()
