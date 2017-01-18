@@ -1,4 +1,11 @@
+*.zip
+derby.log
+.ipynb_checkpoints
+*.csv
+*/tax_return.py
 *.db
+hadoop*
+*.xml.gz
 build.sh
 501cData
 *.xsd

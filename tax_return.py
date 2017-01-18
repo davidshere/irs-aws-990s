@@ -1,6 +1,6 @@
 from lxml import etree
 
-RETURN_FILENAME = '200931393493000150_public.xml'
+RETURN_FILENAME = 'sample_data/200931393493000150_public.xml'
 
 # The returns have a namespace, it needs to be included
 # for querying the document to work.
@@ -14,36 +14,44 @@ class TaxReturn(object):
     def __init__(self, lxml_root):
         self.root = lxml_root
         self.return_version = lxml_root.get('returnVersion')
+
+        # if the doc is an original, it won't have an ObjectID field
         if len(self.root) == 2:
             self.header, self.data = self.root
         else:
             self.header, self.data, self.object_id = self.root
-        self.paths = []
 
-    def get_return_parts(self):
+        self._paths = []
+
+    def _get_return_parts(self):
         """ Split the Return into sections - `IRS990EZ`, `IRS990ScheduleA`, etc... """
         # turn {http://www.irs.gov/efile}IRS990EZ) into IRS990EZ
-        return {data.tag.split('}')[1]: data.getchildren() for data in self.data}
+        return [data.tag.split('}')[1] for data in self.data]
 
     @property
     def form_type(self):
         if not hasattr(self, "_form_type"):
-            self._form_type = [part for part in self.get_return_parts() if part in FORM_TYPES][0]
+            self._form_type = [part for part in self._get_return_parts() if part in FORM_TYPES][0]
         return self._form_type
 
-    def parse_paths(self, element=None, parents=[]):
+    def _parse_paths(self, element=None, parents=[]):
+        """ Does a searches the tree and finds every available path
+            as a dot-separated string, adding each to self._path """
         if element is None: 
             element = self.root
         for elem in element.getchildren():
             elem_tag = elem.tag.split('}')[1]
             if elem.getchildren():
-                self.parse_paths(elem, parents + [elem_tag])
+                self._parse_paths(elem, parents + [elem_tag])
             else:
-                self.paths.append('.'.join(parents + [elem_tag]))
+                self._paths.append('.'.join(parents + [elem_tag]))
 
-    def get_paths(self):
-        self.parse_paths()
-        return self.return_version, self.paths
+    @property
+    def paths(self):
+        if not self._paths:
+            self._parse_paths()
+            return self._paths
+        return self._paths
 
     def find(self, query):
         """

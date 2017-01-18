@@ -26,7 +26,7 @@ class ReturnETL(object):
 	""" A class to fetch raw 990s, transform them into a particular shape,
 		and write them to some output source. 
 
-		source - 'boto' if you're going to iterate through the contents
+		source - 'list' if you're going to iterate through the contents
 				 of `source_bucket`, anything else if you want to get 
 				 URLs from the DB and iterate through those.
 
@@ -40,9 +40,8 @@ class ReturnETL(object):
 		dest_path - the path, relative or absolute, that you want to write your
 					output to, regardless of whether that's s3 or disk
 
-		source_bucket - Necessary if source='boto'. This is the bucket
-						through which you'll iterate. The keys should be
-						XML files that end with '_public.xml'.
+		source_bucket - This is the bucket the returns are stored in. The 
+						keys should be XML files that end with '_public.xml'.
 
 		dest_bucket - Necessary if destination='s3'. 
 
@@ -50,11 +49,11 @@ class ReturnETL(object):
 				column with urls pointing to the XML files you want to pull.
 	"""
 	def __init__(self, 
-				 source='boto', 
+				 source='list', 
 				 destination='s3', 
 				 style='line-delimited',
-				 dest_path = '.',
 				 source_bucket=None,
+				 dest_path = '.',
 				 dest_bucket=None,
 				 query=None):
 		# these attributes are used regardless of source or destination
@@ -63,14 +62,11 @@ class ReturnETL(object):
 		self.destination = destination
 		self.style = style
 		self.dest_path = dest_path
-
-		# if we're getting returns via url instead of boto, we'll need
-		# a query to run
-		self.query = query
-
-		# if we're getting returns with boto, we'll 
-		# need a source bucket
 		self.source_bucket = source_bucket
+
+		# if we're getting returns via url instead of paging through
+		# the bucket, we'll need a query to run
+		self.query = query
 
 		# if we're writing returns to S3, we'll need a bucket
 		self.dest_bucket = dest_bucket
@@ -96,10 +92,10 @@ class ReturnETL(object):
 		single_return = etree.tostring(single_return)
 		return single_return, version
 
-	def get_object_id_from_url(url):
+	def get_object_id_from_url(self, url):
 		return url.split('/')[-1].split('_')[0]
 
-	def get_object_id_from_filename(key_name):
+	def get_object_id_from_filename(self, key_name):
 		return key_name.split('_')[0]
 
 	## iterators to that return raw xml for processing
@@ -108,17 +104,18 @@ class ReturnETL(object):
 		cur = conn.cursor()
 		cur.execute(self.query)
 		for row in cur:
-			# row will be a 1-tuple (i.e `('https://...', )`)
-			url = row[0]
-
-			object_id = get_object_id_from_url(url)
-			r = requests.get(url)
-			yield r.content, object_id
+			# row will be a 1-tuple (i.e `('2016203948232099', )`)
+			object_id = row[0]
+			
+			key_name = '{object_id}_public.xml'.format(object_id=object_id)
+			key_to_fetch = Key(self.source_bucket, key_name)
+			xml = key_to_fetch.read()
+			yield xml, object_id
 
 	def s3_iterator(self):
 		for key in bucket.list():
 			fname = key.name
-			object_id = get_object_id_from_filename(fname)
+			object_id = self.get_object_id_from_filename(fname)
 			if fname.endswith('_public.xml'):	
 				# recover in case of a timeout
 				# but how the hell do you test this?
@@ -142,21 +139,21 @@ class ReturnETL(object):
 
 	def processed_returns(self):
 		""" An iterator that yields aggregated XML files and their version """ 
-		if self.source:
-			iterator = self.sql_iterator()
-		else:
+		if self.source=='list':
 			iterator = self.s3_iterator()
+		else:
+			iterator = self.sql_iterator()
 
 		for index, (xml_string, object_id) in enumerate(iterator):
 			
 			doc, version = self.process_single_return(xml_string, object_id)
 			self.documents[version].append(doc)
 
-			if index % 100:
-				print(i, [{doc_ver: len(self.documents[doc_ver])} for doc_ver in self.documents])
+			if index % 100 == 0:
+				print(index, [{doc_ver: len(self.documents[doc_ver])} for doc_ver in self.documents])
 
 			if len(self.documents[version]) == DOCS_PER_FILE:
-				docs = process_documents_for_writing(version)
+				docs = self.process_documents_for_writing(version)
 				self.documents[version] = []
 				yield docs, version
 
@@ -172,33 +169,36 @@ class ReturnETL(object):
 
 	def _get_filename(self, returns, version):
 		filename = 'v%s_id%d.xml.gz' % (version, id(returns))
-		return self.path + filename
+		return self.dest_path + filename
 
 	def run(self):
 		for file_to_write, version in self.processed_returns():
-			filename = _get_filename(file_to_write, version)
-			if destination == 's3':
-				write = write_s3
+			if self.destination == 's3':
+				write = self.write_s3
 			else:
-				write = write_disk
-			path = _get_filename(file_to_write, version)
-			write(files_to_write, filename)
+				write = self.write_disk
+
+			path = self._get_filename(file_to_write, version)
+			write(file_to_write, path)
 
 		# write whatever is left with less than DOCS_PER_FILE
 		for version in self.documents:
-			returns = self.documents[version]
-			path = _get_filename(returns, version)
+			returns = self.process_documents_for_writing(version)
+			path = self._get_filename(returns, version)
 			write(returns, path)
-
-
 
 if __name__ == "__main__":
 
-	urls_to_fetch_query = 'select url from return_indices where object_id not in (select object_id from found_ids);'
+	conn = S3Connection()
+	source_bucket = conn.get_bucket(SOURCE_BUCKET)
+	dest_bucket = conn.get_bucket(DEST_BUCKET)
+
+	urls_to_fetch_query = 'select object_id from return_indices where object_id not in (select object_id from found_ids);'
 
 	etl = ReturnETL(source='sql',
 					destination='s3',
-					dest_bucket=DEST_BUCKET,
+					dest_bucket=dest_bucket,
+					source_bucket=source_bucket,
 					query=urls_to_fetch_query,
 					dest_path=S3_FOLDER)
 	etl.run()

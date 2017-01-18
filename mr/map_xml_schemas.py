@@ -10,7 +10,8 @@ class MRFindUniquePaths(MRJob):
     def mapper(self, _, line):
         tree = etree.XML(line)
         s = TaxReturn(tree)
-        version, paths = s.get_paths()
+        version = s.return_version
+        paths = s.paths
         form_type = s.form_type
         for path in paths:
             yield (version, form_type), path
