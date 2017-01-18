@@ -1,4 +1,6 @@
 *.zip
+*metastore_db*
+sample_data/
 derby.log
 .ipynb_checkpoints
 *.csv
