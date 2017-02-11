@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from lxml import etree
 
 RETURN_FILENAME = 'sample_data/200931393493000150_public.xml'
