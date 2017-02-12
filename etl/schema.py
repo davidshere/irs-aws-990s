@@ -1,12 +1,13 @@
 from collections import defaultdict
 from lxml import etree
 
-SCHEMA_FILENAME = "../sample_data/efile990x_2015v2.1/2015v2.1/TEGE/Common/IRS990ScheduleB/IRS990ScheduleB.xsd"
+SCHEMA_FILENAME = "../sample_data/efile990x_2015v2.1/2015v2.1/TEGE/TEGE990EZ/IRS990EZ/IRS990EZ.xsd"
 
 XML_ELEMENT_TAG = '{http://www.w3.org/2001/XMLSchema}element'
 
 XML_TAGS = {
 	'{http://www.w3.org/2001/XMLSchema}schema': 'schema',
+	'{http://www.w3.org/2001/XMLSchema}Description': 'description', 
 	'{http://www.w3.org/2001/XMLSchema}annotation': 'annotation',
 	'{http://www.w3.org/2001/XMLSchema}documentation': 'documentation',
 	XML_ELEMENT_TAG: 'element',
@@ -44,21 +45,36 @@ class Schema990:
 
 		Takes a filename as input and parses the tree on instantiation.
 	"""
-	def __init__(self, filename, version):
+	def __init__(self, filename, version, verbose=False):
 		# create the basic tree objects
 		self.tree = etree.parse(filename)
 		self.root = self.tree.getroot()
 
+		self.verbose = verbose
+
 		# parse the tree
 		self.elements = defaultdict(dict)
-		self.parse(self.root)
-		# this shouldn't still be a defaultdict
+		self.parse(self.root, called_at_entry=True)
+
 		self.elements = dict(self.elements)
 		
 		self.form_type = self.get_form_type()
 		self.version = version
 
-	def parse(self, elem, element_type=None, verbose=False):
+	def map_paths(schema, recursion_level=0, parents=[]):
+		for element in schema:
+			dt = element.dataType
+			if isinstance(dt, StructType):
+				new_parent = parents + [element.name]
+				map_paths(dt, recursion_level + 1, new_parent)
+			else:
+				print(element.name, '.'.join(parents + [element.name]))
+
+	def parse(self, 
+		elem, 
+		element_type=None, 
+		parents=[],
+		called_at_entry=False):
 		""" We need to recursively parse an XML schema tree with two different namespaces.
 			One namespace is used by the XML schema definition language, the other by the IRS
 
@@ -82,18 +98,21 @@ class Schema990:
 				# keep track of as we're moving recursively down the tree
 				if tag_type == 'element' and child.get('name'):
 					current_element = child.get('name')
-					if verbose:
+					if called_at_entry:
+						print(current_element)
+						self.schema_for = current_element
+					if self.verbose:
 						print("Element type:", current_element)
 
 				# if we have a passed element name or we got an element name, we
 				# want to call the parser with that element name. Otherwise we 
 				# call it without out.
 				if current_element:
-					self.parse(child, element_type=current_element)
+					self.parse(child, element_type=current_element, parents=parents + [current_element])
 				elif element_type:
-					self.parse(child, element_type=element_type)
+					self.parse(child, element_type=element_type, parents=parents + [element_type])
 				else:
-					self.parse(child)
+					self.parse(child, parents=parents)
 			
 			# or is it an IRS tag?
 			elif child.tag in IRS_TAGS.keys():
@@ -130,6 +149,8 @@ class Schema990:
 
 
 if __name__ == "__main__":
-	schema = Schema990(SCHEMA_FILENAME, '2015v2.1')
-
-
+	SCHEMA_FILENAME = "../sample_data/efile990x_2015v2.1/2015v2.1/TEGE/TEGE990EZ/IRS990EZ/IRS990EZ.xsd"
+	schema = Schema990(SCHEMA_FILENAME, '2015v2.1', verbose=False)
+	for i in schema.elements:
+		print(i)
+		

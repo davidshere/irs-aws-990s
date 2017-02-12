@@ -39,6 +39,7 @@ def process_index_key(key):
 	for i, row in enumerate(rows):
 		row.append(datetime.now().strftime('%Y-%m-%dT%H:%M:%S'))
 		row.append(datetime.now().strftime('%Y-%m-%dT%H:%M:%S'))
+		row.append('\\N') # null value for return_version since we don't have that in this raw data
 
 	return rows
 
@@ -58,6 +59,7 @@ if __name__ == "__main__":
 	for key in keys:
 		print(key)
 		rows = process_index_key(key)
+		print(len(rows))
 
 		for row in rows:
 			row.insert(0, str(id_field))
