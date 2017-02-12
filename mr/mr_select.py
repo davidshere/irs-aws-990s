@@ -15,10 +15,11 @@ class MRGetFields(MRJob):
         tree = etree.XML(line)
         s = TaxReturn(tree)
         object_id = s.find('ObjectID')[0].text
-        yield str(len((self.queries))), 1
-        
-    def reducer(self, key, values):
-        yield key, sum(values)
+        for query in self.queries:
+            results = s.find(query)
+            for result in results:
+                result_text = result.text
+                yield (object_id, query), result_text
 
     def configure_options(self):
         super(MRGetFields, self).configure_options()
