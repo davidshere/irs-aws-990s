@@ -10,8 +10,8 @@ BUCKET_NAME = 'irs-form-990-hadoop'
 conn = S3Connection()
 bucket = conn.get_bucket(BUCKET_NAME)
 
-def remove_unwanted_chars_from_hadoop_output(string):
-	return re.sub(r'[\[\"\]\ ]', '', string)
+def remove_unwanted_chars_from_hadoop_output(hadoop_row):
+	return re.sub(r'[\[\"\]\ ]', '', hadoop_row)
 
 def fetch_results(bucket, s3_folder):
 	results = []
@@ -23,10 +23,10 @@ def fetch_results(bucket, s3_folder):
 			results.extend(rows)
 	return results
 
-def write_to_csv(filename, data):
+def write_to_csv(filename, data, sep='|'):
 	with open(filename, 'w') as f:
-		writer = csv.writer(f)
-		writer.writerows(data)
+		write_str = '\n'.join([sep.join(row) for row in data if any(row)])
+		f.write(write_str)
 
 if __name__ == "__main__":
 
