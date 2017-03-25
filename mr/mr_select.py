@@ -4,7 +4,7 @@ from mrjob.job import MRJob
 
 from tax_return import TaxReturn
 
-class MRGetFields(MRJob):
+class MRSelect(MRJob):
     """ Requires a --paths options pointing to a file where
         each row is a proper dot-separated query string
 
@@ -26,12 +26,12 @@ class MRGetFields(MRJob):
             results = s.find(query)
             for result in results:
                 result_text = result.text
-                yield (object_id, query), result_text
+                yield '|'.join([object_id, query]), result_text
 
     def configure_options(self):
-        super(MRGetFields, self).configure_options()
+        super(MRSelect, self).configure_options()
         self.add_file_option('--paths')
 
 
 if __name__ == '__main__':
-    MRGetFields.run()
+    MRSelect.run()

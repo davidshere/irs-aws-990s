@@ -78,8 +78,9 @@ if __name__ == "__main__":
 
     root = etree.parse(RETURN_FILENAME)
     tr = TaxReturn(root.getroot())
-    print(tr.find('ReturnHeader.Timestamp'))
-    print(tr.find("ReturnHeader.Filer.EIN"))
-    print(tr.find("ReturnData.IRS990.Form990PartVIISectionA"))
-
+    results = tr.find('ReturnHeader.Filer.EIN')
+    print([r.text for r in results])
+    query = "ReturnHeader.Preparer.Name"
+    results = tr.find(query)
+    print([r.text for r in results])
 
