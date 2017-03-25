@@ -5,6 +5,13 @@ from mrjob.job import MRJob
 from tax_return import TaxReturn
 
 class MRGetFields(MRJob):
+    """ Requires a --paths options pointing to a file where
+        each row is a proper dot-separated query string
+
+        TODO:   Update this to include version information -
+                No point querying strings that don't exist
+                in that version!
+    """
 
     def mapper_init(self):
         query_filename = self.options.paths
