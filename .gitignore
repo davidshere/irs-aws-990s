@@ -12,3 +12,6 @@ build.sh
 501cData
 *.xsd
 *.xml
+spark-test/
+irs.sublime-project 
+irs.sublime-workspace
